@@ -96,9 +96,9 @@ left_branch_detected = task_share.Share('B', thread_protect = False, name = "lef
 line_kp_sh = task_share.Share('f',thread_protect=False,name="line_kp")
 line_ki_sh = task_share.Share('f',thread_protect=False,name="line_ki")
 line_base_sp_sh = task_share.Share('i',thread_protect=False,name="line_base")
-line_kp_sh.put(25.0)
-line_ki_sh.put(0.02)
-line_base_sp_sh.put(20)
+line_kp_sh.put(100.0)
+line_ki_sh.put(0.0)
+line_base_sp_sh.put(350)
 
 # IMU Shares
 heading_deg   = task_share.Share('f', thread_protect=False, name="heading_deg")
@@ -508,89 +508,102 @@ def LineSensor_task():
             _print("# Calibration done. Entering follow.")
             line_cal_done.write(1)
 
-            state.write(0)
+            state.write(4)
             
         yield 0
 
 def Follow_task():
     err_int = 0.0
-    anti_windup = 1500.0
+    anti_windup = 2000.0
    
-    err_optint     = 0.0
+
     e_prev      = 0.0
     e_filt      = 0.0
     last_us     = time.ticks_us()
-    kp_line =  25.0
+    kp_line =  30.0
     ki_line =  0.02
     kd_line = 0.001
     base_sp = 20
-    max_sp = 35
+    max_sp = 25
     centroid_filt = 0.0
     alpha = 0.22
+    min_sp = 5
     while True:
         
         if state.read() == 4:
             
             vals = sensors.read_all_norm()
+            N = len(vals)
             centroid = sensors.get_centroid()
 
-            left_side = vals[0] >0.55 or vals[1] > 0.55
-            center = vals[2] > 0.55
-            right_side = vals[3] > 0.55 or vals[4] > 0.55
+            total = sum(vals)
+            if total < 0.2:
+                error = 0
+            else:
+                idx = sum(i * v for i, v in enumerate(vals))/total
+                mid = (N-1) / 2
+                error = (idx - mid) / mid
+          
+        
 
-            if right_side and not left_side:
+            '''if right_side:
                 right_branch_detected.write(1)
             else:
                 right_branch_detected.write(0)
-
+''''''
             if centroid is None:
                 error = 0.0
                 line_lost.write(1)
             else:
-                centroid_filt = (1-alpha)*centroid_filt + alpha*centroid
-                error = centroid
+                
+                desired = 0.0
+                error = desired - centroid 
                 line_lost.write(0)
             
             line_error_sh.write(error)
-            
+            '''
 # fork detection
-            active = sum(v > 0.55 for v in vals) #to indicate split path or diamond
+            '''active = sum(v > 0.55 for v in vals) #to indicate split path or diamond
             if active >= 2 and abs(error) < 0.35:
                 fork_detected.write(1)
 
             else: 
                 fork_detected.write(0)
-
+'''
 
             # PID compute
             now_us = time.ticks_us()
             dt_us  = time.ticks_diff(now_us, last_us) or 1
-            de_dt  = (error - e_prev) * (1_000_000.0 / dt_us)
-            e_prev = error
+            de_dt  = (e_filt - e_prev) * (1_000_000.0 / dt_us)
+            e_prev = e_filt
             last_us = now_us
 
-           
-            err_int += error
+            kp_line = 30.0
+            ki_line = 0.02
+            kd_line= 0
+            base_sp = 20
+            
 
             err_int = max(min(err_int + error, anti_windup), -anti_windup)
             
-            kp_eff = kp_line *(1+0.8*abs(error))
+            #kp_eff = kp_line *(1+0.8*abs(error))
 
-            control = kp_eff * error + ki_line * err_int + kd_line * de_dt
+            control = kp_line * error + ki_line * err_int 
             
             #for sharp turns
-            scale_sp = max(0.55,1.0 - 0.35 * abs(error))
-            base_sp = base_sp * scale_sp
+            #scale_sp = max(0.55,1.0 - 0.35 * abs(error))
+            #base_sp = base_sp * scale_sp
 
             #wheel speed
-            spL_val = base_sp - control
-            spR_val = base_sp + control
+            balance = 2.0
+            spL_val = base_sp +  control
+            spR_val = base_sp - balance - control
 
             #saturation
             if spL_val > max_sp: spL_val = max_sp
-            if spL_val < -max_sp: spL_val = -max_sp
+            if spL_val < min_sp: spL_val = min_sp
             if spR_val > max_sp: spR_val = max_sp
-            if spR_val < -max_sp: spR_val = -max_sp
+            if spR_val < min_sp: spR_val = min_sp
             spL.write(int(spL_val))
             spR.write(int(spR_val))
         
@@ -696,16 +709,6 @@ def observer_task():
 
         yield 0
 
-distance_log = []
-def SerialTrigger_task():
-    while True:
-        if sys.stdin.any():
-            if sys.stdin.read(1) == "\n":
-                d = xhat_s.read()
-                distance_log.append(d)
-                _print("Saved checkpoint: {:.3f} m".format(d))
-        yield 0 
-
 
 
 
@@ -761,19 +764,18 @@ def map_task(): # cut into segments to analyze
             nav_state.write(st)
 
         elif st == NAV_LINE_MAIN :
+            state.write(4)
             if right_branch_detected.read():
+                #spL.write(BASE_SP - 10)
+                #spR.write(BASE_SP + 10)
                 segment_s0 = s_hat
                 nav_state.write(NAV_FORK1)
 
-        elif st == NAV_FORK1:
-            spL.write(BASE_SP - 25)
-            spR.write(BASE_SP + 25)
-            
+        elif st == NAV_FORK1:  
             if s_hat - segment_s0 >= RIGHT_BRANCH_DURACTION:
                 st = NAV_DIAMOND
                 nav_state.write(NAV_DIAMOND)
-                state.write(4)
-
+                
         elif st == NAV_DIAMOND:
 
             st = NAV_BIG_ARC
@@ -799,27 +801,6 @@ def map_task(): # cut into segments to analyze
                 st = NAV_TOP_CURVE
                 nav_state.write(st)
         
-        elif st == NAV_TOP_CURVE:
-            if s_hat > BRIDGE_ALIGN:
-                _print("Start bridge alignment")
-                st = NAV_BRIDGE
-                nav_state.write(st)
-
-        
-        elif st == NAV_FINISH:
-            if s_hat >= FINISH:
-
-                spL.write(0)
-                spR.write(0)
-                go_flag.write(0)
-                state.write(0)
-                st = FINISH
-                nav_state.write(st)
-        
-
-       
-            pass
-                
     
 
 
@@ -838,13 +819,12 @@ def main():
     cotask.task_list.append(cotask.Task(Encoder_task,name="Encoder",priority=5,period=10, profile=False))
 
     cotask.task_list.append(cotask.Task(LineSensor_task, name ="LineSens", priority = 3, period =30, profile = False))
-    cotask.task_list.append(cotask.Task(Follow_task, name="Follow", priority=3, period=30, profile=False))
+    cotask.task_list.append(cotask.Task(Follow_task, name="Follow", priority=3, period=10, profile=False))
     cotask.task_list.append(cotask.Task(task_imu, name="IMU", priority=2, period=80, profile=False, trace=False))
     cotask.task_list.append(cotask.Task(observer_task, name="Observer", priority=3, period = 20, profile =False))
-    #cotask.task_list.append(cotask.Task(map_task, name="Map", priority = 2, period = 70, profile = False))
-    #cotask.task_list.append(cotask.Task(control_task, name="Control", priority = 4, period= 10,profile = False))
-    cotask.task_list.append(cotask.Task(SerialTrigger_task, name="SerialTrig",priority = 1, period = 50, profile = False))
-
+    cotask.task_list.append(cotask.Task(map_task, name="Map", priority = 2, period = 70, profile = False))
+   
+    
     #_print("READY: g <duty%> <ms>  |  v <spL_cps> <spR_cps> <ms>  |  cfg kp ki kd alpha ipd ff  |  vbat <V>")
  
     while True:
