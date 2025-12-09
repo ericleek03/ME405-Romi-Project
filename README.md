@@ -44,19 +44,24 @@ Corresponding to each task, a finite state machine was constructed.
 
 
 
-[System_Architecture](#System_Architecture) 
 
-## PID_task
 
-## Encoder_task
+## Task Descriptions
 
-## LineSensor_task
+Shown below are descriptions of each task used to complete the term project. 
+Use this linnk to return back to [System_Architecture](#System_Architecture) 
 
-## Follow_task
+### PID_task
 
-## task_imu
+### Encoder_task
 
-## observer_task
+### LineSensor_task
 
-## map_task
+### Follow_task
+
+### task_imu
+
+### observer_task
+
+### map_task
 
