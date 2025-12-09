@@ -65,3 +65,24 @@ Use this linnk to return back to [System_Architecture](#System_Architecture)
 
 ### map_task
 
+
+
+## Results
+
+
+
+
+## Troubleshooting and calculations
+
+
+
+## Takeaways 
+
+
+
+
+
+
+
+
+
