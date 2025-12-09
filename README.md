@@ -14,9 +14,9 @@ The image shown below is the course the Romi was tasked to navigate through. To 
 ![Map Course](media/Game_Track-1.png)
 
 
-## System Architeture 
+## System Architecture 
 
-The Romi runs several tasks running using cotask.py to perform line following, state estimation, velocity PID, and map navigation. The following tasks were used to complete the project. Each link will explain what the code will do.
+The Romi runs several tasks running using cotask.py to perform line following, state estimation, velocity PID, and map navigation. The following tasks were used to complete the project. Click each link for descriptions of each task. 
 
   - [PID_task](#PID_task)
   - [Encoder_task](#Encoder_task)
@@ -44,6 +44,19 @@ Corresponding to each task, a finite state machine was constructed.
 
 
 
+[System Architecture](#System_Architecture) 
 
 ## PID_task
+
+## Encoder_task
+
+## LineSensor_task
+
+## Follow_task
+
+## task_imu
+
+## observer_task
+
+## map_task
 
