@@ -513,108 +513,90 @@ def LineSensor_task():
         yield 0
 
 def Follow_task():
-    err_int = 0.0
-    anti_windup = 2000.0
-   
+    err_int      = 0.0
+    anti_windup  = 2000.0
 
-    e_prev      = 0.0
-    e_filt      = 0.0
-    last_us     = time.ticks_us()
-    kp_line =  30.0
-    ki_line =  0.02
-    kd_line = 0.001
+    # Simple fixed gains (same style as your current code)
+    kp_line = 30.0
+    ki_line = 0.02
+
     base_sp = 20
-    max_sp = 25
-    centroid_filt = 0.0
-    alpha = 0.22
-    min_sp = 5
+    max_sp  = 25
+    min_sp  = 5
+
     while True:
-        
         if state.read() == 4:
-            
             vals = sensors.read_all_norm()
-            N = len(vals)
+            N    = len(vals)
             centroid = sensors.get_centroid()
 
+            # --- Line lost / no signal ---
             total = sum(vals)
-            if total < 0.2:
-                error = 0
-            else:
-                idx = sum(i * v for i, v in enumerate(vals))/total
-                mid = (N-1) / 2
-                error = (idx - mid) / mid
-          
-        
-
-            '''if right_side:
-                right_branch_detected.write(1)
-            else:
-                right_branch_detected.write(0)
-''''''
-            if centroid is None:
+            if centroid is None or total < 0.2:
                 error = 0.0
                 line_lost.write(1)
-            else:
-                
-                desired = 0.0
-                error = desired - centroid 
-                line_lost.write(0)
-            
-            line_error_sh.write(error)
-            '''
-# fork detection
-            '''active = sum(v > 0.55 for v in vals) #to indicate split path or diamond
-            if active >= 2 and abs(error) < 0.35:
-                fork_detected.write(1)
-
-            else: 
                 fork_detected.write(0)
-'''
+                right_branch_detected.write(0)
+            else:
+                # --- Fork + right-branch detection ---
+                th = 0.55
+                mid_idx    = N // 2
+                left_vals  = vals[:mid_idx]
+                center_val = vals[mid_idx]
+                right_vals = vals[mid_idx+1:]
 
-            # PID compute
-            now_us = time.ticks_us()
-            dt_us  = time.ticks_diff(now_us, last_us) or 1
-            de_dt  = (e_filt - e_prev) * (1_000_000.0 / dt_us)
-            e_prev = e_filt
-            last_us = now_us
+                left_on   = any(v > th for v in left_vals)
+                right_on  = any(v > th for v in right_vals)
+                center_on = center_val > th
 
-            kp_line = 30.0
-            ki_line = 0.02
-            kd_line= 0
-            base_sp = 20
-            
+                # Fork = line visible left + center + right
+                fork = center_on and left_on and right_on
+                fork_detected.write(1 if fork else 0)
 
+                # Always choose the right-hand path when a fork is present:
+                # bias the "desired" centroid slightly to the right.
+                fork_bias = 0.35   # tune if needed
+
+                if fork:
+                    desired = fork_bias
+                    right_branch_detected.write(1)
+                else:
+                    desired = 0.0
+                    # For NAV_LINE_MAIN: still flag "right branch" when we see center+right only
+                    right_branch_detected.write(
+                        1 if (center_on and right_on and not left_on) else 0
+                    )
+
+                error = desired - centroid
+                line_lost.write(0)
+
+            # Share error for logging / debugging
+            line_error_sh.write(error)
+
+            # --- PI steering around the line (with right skew already in "error") ---
             err_int = max(min(err_int + error, anti_windup), -anti_windup)
-            
-            #kp_eff = kp_line *(1+0.8*abs(error))
+            control = kp_line * error + ki_line * err_int
 
-            control = kp_line * error + ki_line * err_int 
-            
-            #for sharp turns
-            #scale_sp = max(0.55,1.0 - 0.35 * abs(error))
-            #base_sp = base_sp * scale_sp
-
-            #wheel speed
+            # Convert heading correction into wheel speeds
             balance = 2.0
-            spL_val = base_sp +  control
+            spL_val = base_sp + control
             spR_val = base_sp - balance - control
 
-            #saturation
+            # Saturation
             if spL_val > max_sp: spL_val = max_sp
             if spL_val < min_sp: spL_val = min_sp
             if spR_val > max_sp: spR_val = max_sp
             if spR_val < min_sp: spR_val = min_sp
+
             spL.write(int(spL_val))
             spR.write(int(spR_val))
-        
-            pid_mode.write(1)  
-       
-            
+            pid_mode.write(1)
+
         else:
+            # Reset when not following line
             err_int = 0.0
-            e_prev = 0.0
-            centroid_filt = 0.0
             fork_detected.write(0)
+            right_branch_detected.write(0)
             line_lost.write(0)
 
         yield 0
