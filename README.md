@@ -38,3 +38,7 @@ Corresponding to each task, a finite state machine was constructed.
 
 ### Map 
 The image shown below is the course the Romi was tasked to navigate through. To complete the course, the use of line following, state estimation and bump sensing was required. 
+
+![Map Course](docs/Game_Track-1.png)
+
+
