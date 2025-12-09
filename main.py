@@ -334,8 +334,8 @@ def PID_task():
 
 
     while True:
-        st  = state.read()
-        running = (st == 2 and go_flag.read()) or (st == 4)
+        st = state.read()
+        running = (st == 2) or (st == 4)
 
         if running:
             ramp_step = 40
@@ -393,7 +393,7 @@ def PID_task():
             LEFT.set_effort(dutyL)
             RIGHT.set_effort(dutyR)
             
-
+            '''
             # --- LOGGING: ONLY for timed velocity test (state==2) ---
             if st == 2 and len(t_ms) <2048:
                 t_ms.append(time.ticks_diff(time.ticks_ms(), t0))
@@ -402,18 +402,24 @@ def PID_task():
                 L_pos.append(int(lp));  R_pos.append(int(rp))
                 L_vel.append(lv);       R_vel.append(rv)
                 U_cmd.append(int((dutyL + dutyR) // 2))
-
+            '''
             # --- timed stop for state==2; continuous for state==4 ---
-            if st == 2 and time.ticks_diff(time.ticks_ms(), t0) >= int(test_ms.read()):
+            # Only use timed stop when go_flag==1 (i.e., velocity test mode)
+            # --- timed stop for state==2 ONLY WHEN go_flag==1 (velocity test mode) ---
+            '''if st == 2 and go_flag.read() == 1 and time.ticks_diff(time.ticks_ms(), t0) >= int(test_ms.read()):
                 try:
                     LEFT.set_effort(0); RIGHT.set_effort(0)
                     time.sleep_ms(150)
                     LEFT.disable(); RIGHT.disable()
                 except Exception:
                     pass
-                done_flag.write(1); go_flag.write(0); state.write(0)
-                #_print("[PID] STOP st=2 -> done_flag=1")
+
+                done_flag.write(1)
+                go_flag.write(0)
+                state.write(0)
                 started = False
+
+            '''
 
         else:
             if started:
@@ -513,90 +519,90 @@ def LineSensor_task():
         yield 0
 
 def Follow_task():
-    err_int      = 0.0
-    anti_windup  = 2000.0
-
-    # Simple fixed gains (same style as your current code)
+    err_int = 0.0
+    anti_windup = 2000.0
+    lasterror = 0.0
+    filt_err = 0.0
+    filt_deriv = 0.0
+    '''
+    e_prev      = 0.0
+    e_filt      = 0.0
+    last_us     = time.ticks_us()
+    '''
+    base_sp = 25
+    min_sp = 10
+    max_sp = 30
+    centroid_filt = 0.0
+    alpha = 0.4
+    alpha_derivative = 0.3
     kp_line = 30.0
-    ki_line = 0.02
+    ki_line = 0.005
+            
+    kd_line= 2.0
 
-    base_sp = 20
-    max_sp  = 25
-    min_sp  = 5
-
+    noise = 0.01
     while True:
+        
         if state.read() == 4:
+           
             vals = sensors.read_all_norm()
-            N    = len(vals)
+            
+            N = len(vals)
             centroid = sensors.get_centroid()
+            _print(sensors.get_centroid())
 
-            # --- Line lost / no signal ---
-            total = sum(vals)
-            if centroid is None or total < 0.2:
-                error = 0.0
+            
+            
+            if centroid is None:
+                spL.write(min_sp)
+                spR.write(min_sp)
                 line_lost.write(1)
-                fork_detected.write(0)
-                right_branch_detected.write(0)
-            else:
-                # --- Fork + right-branch detection ---
-                th = 0.55
-                mid_idx    = N // 2
-                left_vals  = vals[:mid_idx]
-                center_val = vals[mid_idx]
-                right_vals = vals[mid_idx+1:]
+                yield 0
+                continue
+            line_lost.write(0)
 
-                left_on   = any(v > th for v in left_vals)
-                right_on  = any(v > th for v in right_vals)
-                center_on = center_val > th
+            error =centroid
+            if abs(error) < noise:
+                error = 0.0
+            filt_err = alpha * error + (1-alpha)*filt_err
+            err_int += filt_err
+            err_int = max(min(err_int,1500),-1500)
 
-                # Fork = line visible left + center + right
-                fork = center_on and left_on and right_on
-                fork_detected.write(1 if fork else 0)
+            raw_deriv = filt_err - lasterror
+            filt_deriv = alpha_derivative*raw_deriv + (1-alpha_derivative)* filt_deriv
 
-                # Always choose the right-hand path when a fork is present:
-                # bias the "desired" centroid slightly to the right.
-                fork_bias = 0.35   # tune if needed
+            lasterror = filt_err
 
-                if fork:
-                    desired = fork_bias
-                    right_branch_detected.write(1)
-                else:
-                    desired = 0.0
-                    # For NAV_LINE_MAIN: still flag "right branch" when we see center+right only
-                    right_branch_detected.write(
-                        1 if (center_on and right_on and not left_on) else 0
-                    )
+            control = kp_line*filt_err + ki_line*err_int + kd_line*filt_deriv
+            control = max(min(control,20),-20)
+            #wheel speed
+            balance = 1.20
+           
 
-                error = desired - centroid
-                line_lost.write(0)
+            
+            
+            spR_val = base_sp + control 
+           
+            spL_val = (base_sp - control)*balance
+            
 
-            # Share error for logging / debugging
-            line_error_sh.write(error)
-
-            # --- PI steering around the line (with right skew already in "error") ---
-            err_int = max(min(err_int + error, anti_windup), -anti_windup)
-            control = kp_line * error + ki_line * err_int
-
-            # Convert heading correction into wheel speeds
-            balance = 2.0
-            spL_val = base_sp + control
-            spR_val = base_sp - balance - control
-
-            # Saturation
+            #saturation
             if spL_val > max_sp: spL_val = max_sp
             if spL_val < min_sp: spL_val = min_sp
             if spR_val > max_sp: spR_val = max_sp
             if spR_val < min_sp: spR_val = min_sp
-
+            
             spL.write(int(spL_val))
             spR.write(int(spR_val))
-            pid_mode.write(1)
-
+        
+            pid_mode.write(1)  
+       
+            
         else:
-            # Reset when not following line
             err_int = 0.0
+            e_prev = 0.0
+            #centroid = 0.0
             fork_detected.write(0)
-            right_branch_detected.write(0)
             line_lost.write(0)
 
         yield 0
@@ -710,7 +716,8 @@ def map_task(): # cut into segments to analyze
     NAV_WALL = 11
     NAV_FINAL_LINE = 12
     NAV_FINISH = 13
-    
+    NAV_TEST_STRAIGHT = 100
+    NAV_TEST_TURN = 101
 
 
    
@@ -783,7 +790,50 @@ def map_task(): # cut into segments to analyze
                 st = NAV_TOP_CURVE
                 nav_state.write(st)
         
-    
+        elif st == NAV_TEST_STRAIGHT:
+            target_dist = 1.0
+            speed = 20
+            
+            straight_s0 = s_hat
+
+            spL.write(speed)
+            spR.write(speed)
+            go_flag.write(1)
+            pid_mode.write(1)
+            state.write(2)
+
+            if(s_hat - straight_s0) >= target_dist:
+                spL.write(0)
+                spR.write(0)
+                pid_mode.write(1)
+                state.write(0)
+               
+
+        elif st == NAV_TEST_TURN:
+
+            target_angle = math.radians(90)
+            turn_rate_speed = 20
+
+            if 'tt_init' not in globals():
+                tt_init = True 
+                psi0 = psi_hat
+
+            spL.write(-turn_rate_speed)
+            spR.write(turn_rate_speed)
+
+            pid_mode.write(1)
+            state.write(2)
+
+            dpsi = wrap_pi(psi_hat - psi0)
+
+            if abs(dpsi) >= abs(target_angle):
+                spL.write(0)
+                spR.write(0)
+                pid_mode.write(1)
+                state.write(0)
+                tt_init = False
+                
+
 
 
         yield 0 
@@ -801,7 +851,7 @@ def main():
     cotask.task_list.append(cotask.Task(Encoder_task,name="Encoder",priority=5,period=10, profile=False))
 
     cotask.task_list.append(cotask.Task(LineSensor_task, name ="LineSens", priority = 3, period =30, profile = False))
-    cotask.task_list.append(cotask.Task(Follow_task, name="Follow", priority=3, period=10, profile=False))
+    cotask.task_list.append(cotask.Task(Follow_task, name="Follow", priority=3, period=5, profile=False))
     cotask.task_list.append(cotask.Task(task_imu, name="IMU", priority=2, period=80, profile=False, trace=False))
     cotask.task_list.append(cotask.Task(observer_task, name="Observer", priority=3, period = 20, profile =False))
     cotask.task_list.append(cotask.Task(map_task, name="Map", priority = 2, period = 70, profile = False))
