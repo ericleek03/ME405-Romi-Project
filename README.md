@@ -1,3 +1,40 @@
 # ME405-Romi-Project
 
-The project involves the use of a Romi robot from Pololu. The robot has been constructed with two motors and encoders, as well as a STM32 nucleo board. The main objective of using the Romi robot is to learn the hardware and software to control the robot to complete different tasks. Initially, the group started by learning simple controls to manipulate LED and understand callbacks. Encoder and motor files were constructed to understand the use of classes. With more understanding of the hardware of the robot, the group lead to constructing tasks with generators in order to concurrently run multiple objectives at once. Objectives included the UI_task, line following task, state estimation task, as well as bump sensing. With these different tasks, the final assignment was to follow a map constructed by the instructor and navigate through the course with the knowledge that we have gained from the quarter. 
+## Overview
+
+This repository contains the software and documentation for a MicroPython Romi robot designed for navigation by usng coorperative multitasking, motor control, and sensors to follow a course. The Romi robot was built using a Nucleo L476RG. The line sensor, and bump sensors were purchased through Pololu. 
+
+Please use the table of contents to navigate. 
+
+## System Architeture 
+
+The Romi runs several tasks running using cotask.py to perform line following, state estimation, velocity PID, and map navigation. The following tasks were used to complete the project.
+
+  - PID_task
+  - Encoder_task
+  - LineSensor_task
+  - Follow_task
+  - task_imu
+  - observer_task
+  - map_task
+
+Shared variables are created by using task_share.py to allow for communication through tasks without blocking. Each task is set up as a generator function with each generator having a corresponding priority and run speed based on the importance of the task. This is shown at the bottom the very bottom of the main.py file. 
+
+### Task Diagram 
+
+To show the concurrent tasks running for the Romi project Map course a task diagram was created. 
+
+
+
+### Finite State Machine
+
+Corresponding to each task, a finite state machine was constructed.
+
+
+
+
+
+## Map Course Description 
+
+### Map 
+The image shown below is the course the Romi was tasked to navigate through. To complete the course, the use of line following, state estimation and bump sensing was required. 
