@@ -38,6 +38,10 @@ Component List
 | 1	| Modified Shoe of Brian |
 | 2	| Nucleo L476RG |
 | 1	| Romi Chassis w/ Motors, Encoders, Wheels, and Casters |
+| 1 | 5 Channel IR Sensor | 
+| 2 | Bumm Sensors | 
+| 1 | IMU Sensor | 
+| 1 | Bluetooth Module | 
 
 ## System_Architecture 
 
@@ -52,7 +56,7 @@ The Romi runs several tasks running using cotask.py to perform line following, s
   - [test_observer_task](#test_observer_task)
   - [map_task](#map_task)
 
-Shared variables are created by using task_share.py to allow for communication through tasks without blocking. Each task is set up as a generator function with each generator having a corresponding priority and run speed based on the importance of the task. This is shown at the bottom the very bottom of the main.py file. 
+Shared variables were created by using task_share.py to allow for communication through tasks without blocking. Each task is set up as a generator function with each generator having a corresponding priority and run speed based on the importance of the task. This is shown at the bottom the very bottom of the main.py file. 
 
 ### Task Diagram 
 
