@@ -4,7 +4,9 @@
 
 This repository contains the software and documentation for a MicroPython Romi robot designed for navigation by usng coorperative multitasking, motor control, and sensors to follow a course. The Romi robot was built using a Nucleo L476RG. The line sensor, and bump sensors were purchased through Pololu. 
 
-Please use the table of contents to navigate. 
+**Please use the table of contents in the top right corner to navigate the page.** 
+
+ _The collaborators on this project are **Eric Lee, Roman Ruettimann, and Jonathan Enrique Corvera.** All three students each contributed to the software and hardware of the code equally._ 
 
 ## Map Course Description 
 
@@ -13,6 +15,29 @@ The image shown below is the course the Romi was tasked to navigate through. To 
 
 ![Map Course](media/Game_Track-1.png)
 
+### Romi 
+
+The robot used in this project is shown below. This robot consists of a chassis 
+![IMG_6576](https://github.com/user-attachments/assets/ed25e055-c15b-46d2-824f-2e3d41bdcd17)
+
+
+Component List
+| Quantity | Component |
+| -------- | --------- |
+| 4 |  M2.5 x 8mm Standoff | 
+| 4	| M2.5 x 10mm Standoff |
+| 4 | M2.5 x 30mm Standoff |
+| 4 |	M2.5 x 6mm Socket Head Cap Screw |
+| 4	| M2.5 x 8mm Socket Head Cap Screw |
+| 4	| M2.5 x 10mm Socket Head Cap Screw |
+| 8	| M2.5 Nylon Lock Nuts |
+| 8	| M2.5 Nylon Washer | 
+| 1	| Acrylic Romi-to-Shoe Adapter |
+| 1	| BNO055 IMU Breakout Board | 
+| 1	| Unmodified Shoe of Brian |
+| 1	| Modified Shoe of Brian |
+| 2	| Nucleo L476RG |
+| 1	| Romi Chassis w/ Motors, Encoders, Wheels, and Casters |
 
 ## System_Architecture 
 
@@ -33,7 +58,9 @@ Shared variables are created by using task_share.py to allow for communication t
 
 To show the concurrent tasks running for the Romi project Map course a task diagram was created. 
 
+https://github.com/user-attachments/assets/12b63d06-b12a-43de-abc6-85b22fbb766f
 
+A video of the follow task is shown 
 
 ### Finite State Machine
 
@@ -80,7 +107,8 @@ The map task is responsible for navigating through the course shown in the first
 
 ## Results
 
-
+Line Sensor Following. The video below shows the Romi following a path 
+<video src="path/media/IMG_6451.mp4" width="320" height="240" controls></video>
 
 
 ## Troubleshooting and calculations
