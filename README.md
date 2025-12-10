@@ -17,11 +17,11 @@ The image shown below is the course the Romi was tasked to navigate through. To 
 
 ### Romi 
 
-The robot used in this project is shown below. This robot consists of a chassis 
+The robot used in this project is shown below. This robot consists of a chassis with multiple holes to attach many components.  
 ![IMG_6576](https://github.com/user-attachments/assets/ed25e055-c15b-46d2-824f-2e3d41bdcd17)
 
 
-Component List
+**Component List**
 | Quantity | Component |
 | -------- | --------- |
 | 4 |  M2.5 x 8mm Standoff | 
@@ -42,6 +42,19 @@ Component List
 | 2 | Bumm Sensors | 
 | 1 | IMU Sensor | 
 | 1 | Bluetooth Module | 
+
+**Critical Parameters**
+| Parameter | Value |
+| --------- | ----- | 
+| Chassis Diameter | 	163 mm	 |
+| Track Width (Wheel Center to Wheel Center)	| 141 mm |
+| Wheel Radius | 35 mm |
+| Gear Ratio (Exact) | 	119 25/33 ≈ 119.76	|
+| Encoder Resolution (at Motor) |	1437 1/11 PPR ≈ 1437.1 PPR | 	
+| Motor Voltage (Rated)	| 4.5 V	|
+| Motor Torque (Stall)	| 177 N*mm @ 4.5V <br/> 283 N*mm @ 7.2V | 
+| Motor Speed (No-Load)	| 150 RPM @ 4.5V <br/> 240 RPM @ 7.2V |
+| Max Speed (Translational) |	550 mm/s @ 4.5V <br/> 880 mm/s @ 7.2V |
 
 ## System_Architecture 
 
@@ -69,11 +82,6 @@ A video of the follow task is shown
 ### Finite State Machine
 
 Corresponding to each task, a finite state machine was constructed.
-
-
-
-
-
 
 
 
