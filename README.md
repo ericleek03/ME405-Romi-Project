@@ -56,6 +56,53 @@ The robot used in this project is shown below. This robot consists of a chassis 
 | Motor Speed (No-Load)	| 150 RPM @ 4.5V <br/> 240 RPM @ 7.2V |
 | Max Speed (Translational) |	550 mm/s @ 4.5V <br/> 880 mm/s @ 7.2V |
 
+**Romi Dynamics**
+The equations below show the kinematics of the Romi 
+
+$$
+\mathbf{x} =
+\begin{bmatrix}
+\Omega_L \\
+\Omega_R \\
+X \\
+Y \\
+\theta \\
+s
+\end{bmatrix},
+\quad
+\mathbf{u} =
+\begin{bmatrix}
+u_L \\
+u_R
+\end{bmatrix}
+$$
+
+
+$$
+\dot{\mathbf{x}} =
+\begin{bmatrix}
+\dfrac{K}{\tau}u_L - \dfrac{1}{\tau}\Omega_L \\
+\dfrac{K}{\tau}u_R - \dfrac{1}{\tau}\Omega_R \\
+\dfrac{r}{2}\left(\Omega_R + \Omega_L\right)\cos\theta \\
+\dfrac{r}{2}\left(\Omega_R + \Omega_L\right)\sin\theta \\
+\dfrac{r}{L}\left(\Omega_R - \Omega_L\right) \\
+\dfrac{r}{2}\left(\Omega_R + \Omega_L\right)
+\end{bmatrix}
+$$
+
+
+$$
+\mathbf{y} =
+\begin{bmatrix}
+\Omega_L \\
+\Omega_R \\
+X \\
+Y \\
+\theta \\
+s
+\end{bmatrix}
+$$
+
 ## System_Architecture 
 
 The Romi runs several tasks running using cotask.py to perform line following, state estimation, velocity PID, and map navigation. The following tasks were used to complete the project. Click each link for descriptions of each task. 
@@ -109,6 +156,22 @@ The IMU task is responsible for indicated the heding, and yaw rate found using t
 
 ### observer_task
 By running an rk4 solver, the encoder angular velocity, speed of the Romi, turning angle, and turning speed are all calculated. The observer task is used for state estimation to accurately control the robots distance and turning angles. The state estimation is especially useful in the course to navigate through obstacles with no lines. 
+
+$$
+\begin{array}{rl}
+\mathbf{x}_{n+1} &= \mathbf{x}_{n} + \frac{1}{6} \left(\mathbf{k}_1 + 2 \mathbf{k}_2 + 2 \mathbf{k}_3 + \mathbf{k}_4 \right) \Delta t
+\end{array}
+$$
+where,
+$$
+\begin{array}{rll}
+\mathbf{k}_1 &= \mathbf{f}(t, & \mathbf{x}_n)                                              \\
+\mathbf{k}_2 &= \mathbf{f}(t+\frac{1}{2}\Delta t, & \mathbf{x}_n+\frac{1}{2} k_1 \Delta t) \\
+\mathbf{k}_3 &= \mathbf{f}(t+\frac{1}{2}\Delta t, & \mathbf{x}_n+\frac{1}{2} k_2 \Delta t) \\
+\mathbf{k}_4 &= \mathbf{f}(t+\Delta t, & \mathbf{x}_n+k_3 \Delta t).
+\end{array}
+$$
+
 
 ### test_observer_task
 This task runs tests for the state estimation in order to confirm whether the romi is calibrated correctly to accurately move a certain distance or turn a certain angle. 
