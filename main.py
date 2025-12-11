@@ -112,6 +112,10 @@ xhat_psidot = task_share.Share('f',thread_protect=False,name="xhat_psidot")
 observer_debug = task_share.Share('B',thread_protect=False,name="observer_debug")
 observer_debug_once = task_share.Share('B',thread_protect=False,name="observer_debug_once")
 
+straight_flag = task_share.Share('B',thread_protect = False, name = "straight_flag")
+turn_flag = task_share.Share('B', thread_protect = False, name = "turn_flag")
+turn_left = task_share.Share('f', thread_protect = False, name = "turn_left")
+turn_right = task_share.Share('f', thread_protect = False, name = "turn_right")
 LINE_PINS = ['PB0','PB1','PA1','PC2','PC3'] # adjust based on pins
 
 
@@ -135,8 +139,11 @@ ENCR  = Encoder(ENC_TIM_R, PIN_ENC_RA, PIN_ENC_RB, ENC_AR_R)
 # PID controllers (one per wheel). Output units = Volts; out_max will be clamped later by duty map.
 # dt uses CTRL_MS; derivative low-pass via alpha (runtime settable).
 _pid_dt = CTRL_MS / 1000.0
-pidL = PIDController(kp=0.08, ki=0.002, kd=0.001, out_max=12.0, delta_t=_pid_dt, alpha=0.8, ipd=1)
-pidR = PIDController(kp=0.08, ki=0.002, kd=0.001, out_max=12.0, delta_t=_pid_dt, alpha=0.8, ipd=1)
+kp = 0.1
+ki = 0.002
+kd = 0.001
+pidL = PIDController(kp, ki, kd, out_max=12.0, delta_t=_pid_dt, alpha=0.8, ipd=1)
+pidR = PIDController(kp, ki, kd, out_max=12.0, delta_t=_pid_dt, alpha=0.8, ipd=1)
 
 #Wheel Parameters
 r = 0.035 # in meters
@@ -146,31 +153,13 @@ K = 250*2*math.pi/60/4.5
 
 a = -1.0/tau
 b = K/tau
-'''
-A = np.array([
-    [a, 0.0, 0.0, 0.0],
-    [0.0, a, 0.0, 0.0],
-    [r/2, r/2, 0.0, 0.0],
-    [-r/L, r/L, 0.0, 0.0]
-])
-B = np.array([
-    [b, 0.0],
-    [0.0, b],
-    [0.0, 0.0],
-    [0.0, 0.0]
-])
 
-C = np.array([
-    [1.0, 0.0, 0, 0],
-    [0.0, 1.0, 0, 0],
-    [0.0, 0.0, 0.0, 1.0],
-    [-r/L, r/L, 0.0, 0.0]
-])
 
-'''
+
+
 L1 = 16.0
 L2 = 16.0
-L3 = 6.0
+L3 = 10.0
 L4 = 4.0
 #observer gain A-L*C adjust these parameters'''
 '''
@@ -263,15 +252,7 @@ def observer_f(t,xhat,u,y):
     Le = np.dot(L_obs, e)
     return Ax + Bu + Le
 
-def RK4_solver(x, dt, f):
 
-    k1 = f(x)
-    k2 = f(x+0.5*dt*k1)
-    k3 = f(x+0.5*dt*k2)
-    k4 = f(x+dt*k3)
-
-
-    return x+(dt/6.0)*(k1+2*k2+2*k3+k4)
 
 # IMU setup + startup calibration procedure
 try:
@@ -331,13 +312,14 @@ def PID_task():
     last_dbg  = time.ticks_ms()
 
     # cps ramp (per CTRL tick); CTRL_MS=10 ms => ~ramp_step*100 cps/s
-
+    
 
     while True:
-        st = state.read()
-        running = (st == 2) or (st == 4)
+        st  = state.read()
+        running = (st == 2 and go_flag.read()) or (st == 4) or (st == 5 )
+        
 
-        if running:
+        if running == 1:
             ramp_step = 40
             if not started:
                 try:
@@ -355,7 +337,7 @@ def PID_task():
                 del t_ms[:]; del L_pos[:]; del L_vel[:]; del R_pos[:]; del R_vel[:]; del U_cmd[:]
                 t0 = time.ticks_ms()
                 started = True
-                _print("[PID] START st={} ms={}".format(st, test_ms.read() if st==2 else -1))
+                #_print("[PID] START st={} ms={}".format(st, test_ms.read() if st==2 else -1))
 
             # --- measurements (RAD/S) ---
             lv = float(Lvel_sh.read())
@@ -366,13 +348,16 @@ def PID_task():
             tgtR_cps = float(spR.read())
            
             # --- ramp cps toward targets ---
-     
+            tgtL_cps_rad = tgtL_cps*RAD_PER_COUNT
+            tgtR_cps_rad = tgtR_cps*RAD_PER_COUNT
+            #_print(tgtL_cps)
+            
             # --- set PID setpoints in RAD/S ---
             pidL.set_setpoint(tgtL_cps)
             pidR.set_setpoint(tgtR_cps)
-
+           
             # --- controller update (feedforward optional: V per cps) ---
-            ff  =  0.003
+            ff  =  0.01
             uL  = pidL.update(lv, feedforward = ff*tgtL_cps)
             uR  = pidR.update(rv, feedforward =ff*tgtR_cps)
            
@@ -380,7 +365,7 @@ def PID_task():
             vbat  = 7.4
             dutyL = 100.0*(uL/vbat)
             dutyR = 100.0*(uR/vbat)
-            
+            #_print("dutyL={} dutyR={}".format(dutyL, dutyR))
             if dutyL > 100: dutyL = 100
             if dutyL < -100: dutyL = -100
             if dutyR > 100: dutyR = 100
@@ -403,24 +388,19 @@ def PID_task():
                 L_vel.append(lv);       R_vel.append(rv)
                 U_cmd.append(int((dutyL + dutyR) // 2))
             '''
+            '''
             # --- timed stop for state==2; continuous for state==4 ---
-            # Only use timed stop when go_flag==1 (i.e., velocity test mode)
-            # --- timed stop for state==2 ONLY WHEN go_flag==1 (velocity test mode) ---
-            '''if st == 2 and go_flag.read() == 1 and time.ticks_diff(time.ticks_ms(), t0) >= int(test_ms.read()):
+            if st == 2 and time.ticks_diff(time.ticks_ms(), t0) >= int(test_ms.read()):
                 try:
                     LEFT.set_effort(0); RIGHT.set_effort(0)
                     time.sleep_ms(150)
                     LEFT.disable(); RIGHT.disable()
                 except Exception:
                     pass
-
-                done_flag.write(1)
-                go_flag.write(0)
-                state.write(0)
+                done_flag.write(1); go_flag.write(0); state.write(0)
+                #_print("[PID] STOP st=2 -> done_flag=1")
                 started = False
-
             '''
-
         else:
             if started:
                 try:
@@ -521,77 +501,95 @@ def LineSensor_task():
 def Follow_task():
     err_int = 0.0
     anti_windup = 2000.0
-    lasterror = 0.0
-    filt_err = 0.0
-    filt_deriv = 0.0
-    '''
+   
+
     e_prev      = 0.0
     e_filt      = 0.0
     last_us     = time.ticks_us()
-    '''
-    base_sp = 25
-    min_sp = 10
-    max_sp = 30
+    kp_line =  30.0
+    ki_line =  0.02
+    kd_line = 0.001
+    base_sp = 20
+    max_sp = 25
     centroid_filt = 0.0
-    alpha = 0.4
-    alpha_derivative = 0.3
-    kp_line = 30.0
-    ki_line = 0.005
-            
-    kd_line= 2.0
-
-    noise = 0.01
+    alpha = 0.22
+    min_sp = 5
     while True:
         
         if state.read() == 4:
-           
-            vals = sensors.read_all_norm()
             
+            vals = sensors.read_all_norm()
             N = len(vals)
             centroid = sensors.get_centroid()
-            _print(sensors.get_centroid())
 
-            
-            
+            total = sum(vals)
+            if total < 0.2:
+                error = 0
+            else:
+                idx = sum(i * v for i, v in enumerate(vals))/total
+                mid = (N-1) / 2
+                error = (idx - mid) / mid
+          
+        
+
+            '''if right_side:
+                right_branch_detected.write(1)
+            else:
+                right_branch_detected.write(0)
+''''''
             if centroid is None:
-                spL.write(min_sp)
-                spR.write(min_sp)
-                line_lost.write(1)
-                yield 0
-                continue
-            line_lost.write(0)
-
-            error =centroid
-            if abs(error) < noise:
                 error = 0.0
-            filt_err = alpha * error + (1-alpha)*filt_err
-            err_int += filt_err
-            err_int = max(min(err_int,1500),-1500)
+                line_lost.write(1)
+            else:
+                
+                desired = 0.0
+                error = desired - centroid 
+                line_lost.write(0)
+            
+            line_error_sh.write(error)
+            '''
+# fork detection
+            '''active = sum(v > 0.55 for v in vals) #to indicate split path or diamond
+            if active >= 2 and abs(error) < 0.35:
+                fork_detected.write(1)
 
-            raw_deriv = filt_err - lasterror
-            filt_deriv = alpha_derivative*raw_deriv + (1-alpha_derivative)* filt_deriv
+            else: 
+                fork_detected.write(0)
+'''
 
-            lasterror = filt_err
+            # PID compute
+            now_us = time.ticks_us()
+            dt_us  = time.ticks_diff(now_us, last_us) or 1
+            de_dt  = (e_filt - e_prev) * (1_000_000.0 / dt_us)
+            e_prev = e_filt
+            last_us = now_us
 
-            control = kp_line*filt_err + ki_line*err_int + kd_line*filt_deriv
-            control = max(min(control,20),-20)
+            kp_line = 30.0
+            ki_line = 0.02
+            kd_line= 0
+            base_sp = 20
+            
+
+            err_int = max(min(err_int + error, anti_windup), -anti_windup)
+            
+            #kp_eff = kp_line *(1+0.8*abs(error))
+
+            control = kp_line * error + ki_line * err_int 
+            
+            #for sharp turns
+            #scale_sp = max(0.55,1.0 - 0.35 * abs(error))
+            #base_sp = base_sp * scale_sp
+
             #wheel speed
-            balance = 1.20
-           
-
-            
-            
-            spR_val = base_sp + control 
-           
-            spL_val = (base_sp - control)*balance
-            
+            balance = 2.0
+            spL_val = base_sp +  control
+            spR_val = base_sp - balance - control
 
             #saturation
             if spL_val > max_sp: spL_val = max_sp
             if spL_val < min_sp: spL_val = min_sp
             if spR_val > max_sp: spR_val = max_sp
             if spR_val < min_sp: spR_val = min_sp
-            
             spL.write(int(spL_val))
             spR.write(int(spR_val))
         
@@ -601,7 +599,7 @@ def Follow_task():
         else:
             err_int = 0.0
             e_prev = 0.0
-            #centroid = 0.0
+            centroid_filt = 0.0
             fork_detected.write(0)
             line_lost.write(0)
 
@@ -637,7 +635,10 @@ def observer_task():
     x_s = 0.0
     x_psi = 0.0
     
-    inited = False
+    initiated = False
+    def RK4_solver(x, dt, f1, f2, f3, f4):
+ 
+        return x+(dt/6.0)*(f1+2*f2+2*f3+f4)
 
     while True:
         vbat = 7.4
@@ -655,48 +656,223 @@ def observer_task():
     # encoder positions angle (rad) to arc length
         omegaL_meas = float(Lvel_sh.read())
         omegaR_meas = float(Rvel_sh.read())
+        
 
-        psi = math.radians(heading_deg.read())
-        psidot = math.radians(yaw_rate_dps.read())
+        psi_meas = math.radians(heading_deg.read())
+        psidot_meas = math.radians(yaw_rate_dps.read())
 
-        if not inited:
+        thetaL = ENCL.get_position() * RAD_PER_COUNT
+        thetaR = ENCR.get_position() * RAD_PER_COUNT
+
+        s_meas = (r/2) * (thetaL + thetaR)
+
+
+        if not initiated:
             x_omegaL = omegaL_meas
             x_omegaR = omegaR_meas
-            x_s = 0.0
-            x_psi = psi
-            inited = True
+            x_s = s_meas
+            x_psi = psi_meas
+            initiated = True
         
         psidot_hat = (r/L)*(x_omegaR-x_omegaL)
 
         e0 = omegaL_meas - x_omegaL
         e1 = omegaR_meas - x_omegaR
-        e2 = wrap_pi(psi - x_psi)
-        e3 = psidot - psidot_hat
-        
-        def f_omegaL(x):
-            return a*x + b*uL + L1*e0
-        def f_omegaR(x):
-            return a*x + b*uR + L2*e1
-        def f_s(x):
-            return(r/2.0)*(x_omegaL + x_omegaR) + L3*e2
-        def f_psi(x):
-            return(r/L)*(x_omegaR - x_omegaL) + L4*e3
+        e_s = s_meas - x_s
+        e_psi = wrap_pi(psi_meas - x_psi)
 
-        x_omegaL = RK4_solver(x_omegaL,dt,f_omegaL)
-        x_omegaR = RK4_solver(x_omegaR,dt,f_omegaR)
-        x_s = RK4_solver(x_s,dt,f_s)
-        x_psi = RK4_solver(x_psi,dt,f_psi)
-        x_psi = wrap_pi(x_psi) 
+        # yaw rate from the wheels
+        psidot_hat = (r/L) * (x_omegaR - x_omegaL)
+        e_psidot = psidot_meas - psidot_hat
+
+
+        # rk4 solver integrators
+
+        f1 = a*x_omegaL + b*uL + L1*e0
+        f2 = a*(x_omegaL + 0.5 *dt*f1) + b*uL + L1*e0
+        f3 = a*(x_omegaL + 0.5*dt*f2) + b*uL + L1 * e0
+        f4 = a*(x_omegaL + dt*f3) + b*uL + L1 * e0
+        x_omegaL = RK4_solver(x_omegaL, dt, f1, f2,f3,f4)
+
+        f1 = a*x_omegaR + b*uL + L2*e1
+        f2 = a*(x_omegaR + 0.5 *dt*f1) + b*uR + L2*e1
+        f3 = a*(x_omegaR + 0.5*dt*f2) + b*uR + L2 * e1
+        f4 = a*(x_omegaR + dt*f3) + b*uR + L2 * e1
+        x_omegaR = RK4_solver(x_omegaR,dt,f1,f2,f3,f4)
+
+        v_s = (r/2) * (x_omegaL + x_omegaR)
+        f1 = v_s + L3*e_s
+        f2 = ((r/2)*(x_omegaL + x_omegaR) + L3*e_s)
+        f3 = ((r/2)*(x_omegaL + x_omegaR) + L3*e_s)
+        f4 = ((r/2)*(x_omegaL + x_omegaR) + L3*e_s)
+        x_s = RK4_solver(x_s, dt, f1, f2,f3,f4)
+
+        yaw_dot = (r/L) * (x_omegaR - x_omegaL)
+        f1 = yaw_dot + L4*e_psidot
+        f2 = yaw_dot + L4*e_psidot
+        f3 = yaw_dot + L4*e_psidot
+        f4 = yaw_dot + L4*e_psidot
+        x_psi = wrap_pi(RK4_solver(x_psi,dt,f1,f2,f3,f4))
 
         xhat_omegaL.write(x_omegaL)
         xhat_omegaR.write(x_omegaR)
         xhat_s.write(x_s)
         xhat_psi.write(x_psi)
-        psidot_est = (r/L) * (x_omegaR - x_omegaL)
-        xhat_psidot.write(psidot_est)
+        xhat_psidot.write((r/L) * (x_omegaR - x_omegaL))
+        
 
         yield 0
 
+def test_observer_task():
+    
+    test_speed = 20
+    test_turn_speed = 20
+    overshoot = 0.03
+    target_dist = 0.15-overshoot # cm to meters
+    target_angle = math.radians(90)
+    running = False
+    start_s = 0.0
+    start_psi = 0.0
+    R = 0.035
+    t_react = 0.30
+   
+    while True:
+        if state.read() == 5: 
+            
+            s_hat = xhat_s.read()
+            psi_hat = xhat_psi.read()
+            
+            if not running:  
+                running = True
+                start_s = s_hat
+                go_flag.write(1)
+                #state.write(2)
+
+            spL.write(test_speed)
+            spR.write(test_speed)
+            
+            
+            ds = abs(s_hat - start_s)
+           
+            omegaL_s = xhat_omegaL.read()
+            omegaR_s = xhat_omegaR.read()
+           
+
+          
+            
+            _print("s_hat={:.3f}, start_s={:.3f}, ds={:.3f}".format(s_hat, start_s, abs(s_hat - start_s)))
+            
+            if ds >= target_dist:
+                
+                spL.write(0); spR.write(0)
+                
+                pid_mode.write(1)
+                state.write(0)
+                running = False
+                nav_state.write(0)
+           
+            
+        
+
+        
+
+        yield 0 
+
+def turn_observer_task():
+    test_turn_speed = 20
+    target_angle = math.radians(90)
+    running = False
+    start_psi = 0.0
+    R=0.035
+
+    while True:
+
+        if state.read() == 6:
+            psi_hat = xhat_psi.read()
+
+            if not running:
+                running = True
+                start_psi = psi_hat
+                go_flag.write(1)
+
+            spL.write(-test_turn_speed)
+            spR.write(test_turn_speed)
+
+            dpsi = wrap_pi(psi_hat - start_psi)
+            _print("psi={:.3f}, dpsi={:.3f}".format(psi_hat, dpsi))
+
+            if abs(dpsi) >= abs(target_angle):
+                spL.write(0); spR.write(0)
+                pid_mode.write(1)
+                state.write(0)
+                running = False
+                nav_state.write(0)
+                
+            yield 0
+
+def straight_turn_task():
+    test_speed = 20
+    test_turn_speed = 20
+    overshoot = 0.03
+    target_dist = 0.15-overshoot # cm to meters
+    target_angle = math.radians(90)
+    running = False
+    start_s = 0.0
+    start_psi = 0.0
+    R = 0.035
+    t_react = 0.30
+
+
+    while True:
+
+        if state.read() == 7:
+            s_hat = xhat_s.read()
+            psi_hat = xhat_psi.read()
+
+            if not running:
+                running = True
+                start_psi = psi_hat
+                start_s = s_hat
+                go_flag.write(1)
+
+            if straight_flag.read():
+                spL.write(test_speed)
+                spR.write(test_speed)
+            
+            
+                ds = abs(s_hat - start_s)
+           
+                omegaL_s = xhat_omegaL.read()
+                omegaR_s = xhat_omegaR.read()
+           
+
+          
+            
+                _print("s_hat={:.3f}, start_s={:.3f}, ds={:.3f}".format(s_hat, start_s, abs(s_hat - start_s)))
+            
+                if ds >= target_dist:
+                
+                    spL.write(0); spR.write(0)
+                
+                    pid_mode.write(1)
+                    state.write(0)
+                    running = False
+                    nav_state.write(0)
+            if turn_flag.read():
+                spL.write(-test_turn_speed)
+                spR.write(test_turn_speed)
+
+                dpsi = wrap_pi(psi_hat - start_psi)
+                _print("psi={:.3f}, dpsi={:.3f}".format(psi_hat, dpsi))
+
+                if abs(dpsi) >= abs(target_angle):
+                    spL.write(0); spR.write(0)
+                    pid_mode.write(1)
+                    state.write(0)
+                    running = False
+                    nav_state.write(0)
+                    
+        yield 0     
 
 
 
@@ -733,7 +909,7 @@ def map_task(): # cut into segments to analyze
     BRIDGE_TURN_ANGLE = math.radians(90)
     BASE_BRIDGE = 25
 
-    st = NAV_START
+    st = NAV_TEST_STRAIGHT
     nav_state.write(st)
     s_start = 0.0
     bridge_entry_psi = 0.0
@@ -791,14 +967,14 @@ def map_task(): # cut into segments to analyze
                 nav_state.write(st)
         
         elif st == NAV_TEST_STRAIGHT:
-            target_dist = 1.0
+            target_dist = 0.5
             speed = 20
-            
-            straight_s0 = s_hat
+            if 'ts_init' not in globals():
+                ts_init = True
+                straight_s0 = s_hat
 
             spL.write(speed)
             spR.write(speed)
-            go_flag.write(1)
             pid_mode.write(1)
             state.write(2)
 
@@ -807,10 +983,8 @@ def map_task(): # cut into segments to analyze
                 spR.write(0)
                 pid_mode.write(1)
                 state.write(0)
-               
-
+                ts_init = False
         elif st == NAV_TEST_TURN:
-
             target_angle = math.radians(90)
             turn_rate_speed = 20
 
@@ -841,7 +1015,7 @@ def map_task(): # cut into segments to analyze
 
 def main():
     # Create tasks and add to scheduler
-    state.write(0)
+    state.write(6)
     go_flag.write(0)
     line_cal_done.write(0)
     nav_state.write(0)
@@ -851,12 +1025,13 @@ def main():
     cotask.task_list.append(cotask.Task(Encoder_task,name="Encoder",priority=5,period=10, profile=False))
 
     cotask.task_list.append(cotask.Task(LineSensor_task, name ="LineSens", priority = 3, period =30, profile = False))
-    cotask.task_list.append(cotask.Task(Follow_task, name="Follow", priority=3, period=5, profile=False))
+    cotask.task_list.append(cotask.Task(Follow_task, name="Follow", priority=3, period=10, profile=False))
     cotask.task_list.append(cotask.Task(task_imu, name="IMU", priority=2, period=80, profile=False, trace=False))
     cotask.task_list.append(cotask.Task(observer_task, name="Observer", priority=3, period = 20, profile =False))
-    cotask.task_list.append(cotask.Task(map_task, name="Map", priority = 2, period = 70, profile = False))
-   
-    
+    #cotask.task_list.append(cotask.Task(map_task, name="Map", priority = 2, period = 70, profile = False))
+    cotask.task_list.append(cotask.Task(test_observer_task,name = "TestObserver", priority = 2, period = 50, profile = False))
+    cotask.task_list.append(cotask.Task(turn_observer_task, name = "TurnObserver", priority = 2, period = 50, profile = False))
+    cotask.task_list.append(cotask.Task(straight_turn_task, name = "straight_turn", priority = 2, period= 50, profile = False))
     #_print("READY: g <duty%> <ms>  |  v <spL_cps> <spR_cps> <ms>  |  cfg kp ki kd alpha ipd ff  |  vbat <V>")
  
     while True:
