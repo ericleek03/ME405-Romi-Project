@@ -8,6 +8,12 @@ This repository contains the software and documentation for a MicroPython Romi r
 
  _The collaborators on this project are **Eric Lee, Roman Ruettimann, and Jonathan Enrique Corvera.** All three students each contributed to the software and hardware of the code equally._ 
 
+
+## Installation Instructions
+All the python files included in the compile file is used to run the Romi system. The files in the compile folder should be imported directly into the Romi with a usb cord. The **main.py** is the central code. This code is reponsible for holding all the tasks and shared variables. The other files are classes and objects used to make the code function. To run the code, a terminal emulator, PuTTY,  was used to run commands and the code. Find the communication port number on your computer and select a baudrate of 115200 to open a PuTTY terminal. 
+
+The main commands used on the PuTTY terminal is control C and Control D.  Control C allows the user to interrupt the code, while control D allows for you to reboot the code whenever you adjust the code. 
+
 ## Map Course Description 
 
 ### Map 
@@ -57,7 +63,7 @@ The robot used in this project is shown below. This robot consists of a chassis 
 | Max Speed (Translational) |	550 mm/s @ 4.5V <br/> 880 mm/s @ 7.2V |
 
 **Romi Dynamics**
-The equations below show the kinematics of the Romi 
+The equations below show the state equations of the Romi
 
 $$
 \mathbf{x} =
@@ -122,13 +128,12 @@ Shared variables were created by using task_share.py to allow for communication 
 
 To show the concurrent tasks running for the Romi project Map course a task diagram was created. 
 
-https://github.com/user-attachments/assets/12b63d06-b12a-43de-abc6-85b22fbb766f
 
-A video of the follow task is shown 
+
 
 ### Finite State Machine
 
-Corresponding to each task, a finite state machine was constructed.
+A finite state machine was constructed that corresponded to most of the tasks used 
 
 
 
@@ -183,17 +188,22 @@ The map task is responsible for navigating through the course shown in the first
 ## Results
 
 Line Sensor Following. The video below shows the Romi following a path 
-<video src="path/media/IMG_6451.mp4" width="320" height="240" controls></video>
+
+https://github.com/user-attachments/assets/12b63d06-b12a-43de-abc6-85b22fbb766f
+
 
 
 ## Troubleshooting and calculations
-Main issues pertained to the line following of the robot. At the beginning the line sensor would not follow the line accurately, usually overshooting or lacking the response time to quickly adjust back to the line.
+Main issues related to line following of the robot. At the beginning the line sensor would not follow the line accurately, usually overshooting or lacking the response time to quickly adjust back to the line.
+
+With the state estimation mode, the robot tends to overshoot a certain distance and the turning angle was slighty off. This was fixed by adding overshoot correction variables. 
 
 
 
 
 ## Takeaways 
 
+The main takeaway from the project is learning how to structure code efficiently to perform tasks. Thorughout the quarter, focusing on what tasks required priority and at what frequency to run it the code became very important. Calibration also took a considerable amount of time to complete. The time to complete calibrations was mitigated by analyzing data and observing physical reactions of the robot. Finally, troubleshooting code was an important lesson to learn as it was important to dive deep into the root cause of the issue.
 
 
 
