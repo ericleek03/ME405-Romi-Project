@@ -116,6 +116,11 @@ straight_flag = task_share.Share('B',thread_protect = False, name = "straight_fl
 turn_flag = task_share.Share('B', thread_protect = False, name = "turn_flag")
 turn_left = task_share.Share('f', thread_protect = False, name = "turn_left")
 turn_right = task_share.Share('f', thread_protect = False, name = "turn_right")
+target_distance = task_share.Share('B', thread_protect = False, name = "target_distance")
+target_turn = task_share.Share('B', thread_protect = False, name = "target_turn")
+motion_done = task_share.Share('B', thread_protect = False, name = "motion_done")
+speed = task_share.Share('B', thread_protect = False, name = "Speed")
+
 LINE_PINS = ['PB0','PB1','PA1','PC2','PC3'] # adjust based on pins
 
 
@@ -814,7 +819,6 @@ def straight_turn_task():
     test_speed = 20
     test_turn_speed = 20
     overshoot = 0.03
-    target_dist = 0.15-overshoot # cm to meters
     target_angle = math.radians(90)
     running = False
     start_s = 0.0
@@ -834,43 +838,49 @@ def straight_turn_task():
                 start_psi = psi_hat
                 start_s = s_hat
                 go_flag.write(1)
+                motion_done.write(0)
 
             if straight_flag.read():
+                target_dist = target_distance.read() - overshoot
                 spL.write(test_speed)
                 spR.write(test_speed)
             
             
                 ds = abs(s_hat - start_s)
            
-                omegaL_s = xhat_omegaL.read()
-                omegaR_s = xhat_omegaR.read()
-           
-
-          
-            
-                _print("s_hat={:.3f}, start_s={:.3f}, ds={:.3f}".format(s_hat, start_s, abs(s_hat - start_s)))
-            
                 if ds >= target_dist:
                 
                     spL.write(0); spR.write(0)
-                
+                    motion_done.write(1)
+                    turn_flag.write(0)
                     pid_mode.write(1)
-                    state.write(0)
+                    state.write(3) # change back to line following
                     running = False
-                    nav_state.write(0)
-            if turn_flag.read():
-                spL.write(-test_turn_speed)
-                spR.write(test_turn_speed)
+                    
+                    straight_flag.write(0)
+
+            elif turn_flag.read():
+                target_angle = math.radians(target_turn.read())
+                if turn_left.read() == 1:
+
+                    spL.write(-test_turn_speed)
+                    spR.write(test_turn_speed)
+                elif turn_right.read() == 1:
+                    spL.write(test_turn_speed)
+                    spR.write(-test_turn_speed)
+            
 
                 dpsi = wrap_pi(psi_hat - start_psi)
-                _print("psi={:.3f}, dpsi={:.3f}".format(psi_hat, dpsi))
-
+              
                 if abs(dpsi) >= abs(target_angle):
+                    turn_flag.write(0)
+                    straight_flag.write(0)
+                    motion_done.write(1)
                     spL.write(0); spR.write(0)
                     pid_mode.write(1)
-                    state.write(0)
+                    state.write(3) #change back to following
                     running = False
-                    nav_state.write(0)
+                   
                     
         yield 0     
 
@@ -879,37 +889,25 @@ def straight_turn_task():
 def map_task(): # cut into segments to analyze
     _print("task created")
     NAV_START = 0
-    NAV_LINE_MAIN = 1
     NAV_FORK1 = 2
     NAV_DIAMOND = 3
-    NAV_BIG_ARC = 4
-    NAV_DOT_LINE = 5
-    NAV_FORK2  = 6
-    NAV_TOP_CURVE = 7
+    NAV_DOT_LINE = 4
+    NAV_FORK2  = 5
+    NAV_TOP_CURVE = 6
+    NAV_MAZE = 7
     NAV_BRIDGE = 8
     NAV_BRIDGE_TURN = 9
-    NAV_LINE_FOLLOW = 10
+    NAV_BRIDGE_EXIT = 10
     NAV_WALL = 11
-    NAV_FINAL_LINE = 12
-    NAV_FINISH = 13
-    NAV_TEST_STRAIGHT = 100
+    NAV_TURN = 12
+    NAV_FINAL = 13
+    NAV_FINISH = 14
+  
+  
+   
     NAV_TEST_TURN = 101
 
-
-   
-
-
-    
-    BASE_SP = 20
-    RIGHT_BRANCH_TURN_SPEED = 50
-    RIGHT_BRANCH_DURACTION = 0.40 #meters to commit
-
-    BRIDGE_ENTRY_S = 3.70
-    BRIDGE_LENGTH = 0.4 # meters forward on bridge
-    BRIDGE_TURN_ANGLE = math.radians(90)
-    BASE_BRIDGE = 25
-
-    st = NAV_TEST_STRAIGHT
+    st = NAV_START
     nav_state.write(st)
     s_start = 0.0
     bridge_entry_psi = 0.0
@@ -925,88 +923,103 @@ def map_task(): # cut into segments to analyze
             line_cal_done.write(0)
             state.write(3) # starts linesenosr task
             _print("[NAV] -> LINE_CAL")
-            st = NAV_LINE_MAIN
+            st = NAV_FORK1
             nav_state.write(st)
 
-        elif st == NAV_LINE_MAIN :
-            state.write(4)
-            if right_branch_detected.read():
-                #spL.write(BASE_SP - 10)
-                #spR.write(BASE_SP + 10)
-                segment_s0 = s_hat
-                nav_state.write(NAV_FORK1)
+        elif st == NAV_FORK1:
+            _print("[NAV] -> LINE_MAIN")
+            fork_detected.write(1)
+            _print("[NAV] Fork Detected Turn Right")
+            st = NAV_DIAMOND 
+            nav_state.write(st)
 
-        elif st == NAV_FORK1:  
-            if s_hat - segment_s0 >= RIGHT_BRANCH_DURACTION:
-                st = NAV_DIAMOND
-                nav_state.write(NAV_DIAMOND)
-                
         elif st == NAV_DIAMOND:
-
-            st = NAV_BIG_ARC
-            nav_state.write(NAV_BIG_ARC)
-
-
-        elif st == NAV_BIG_ARC:
+            _print("[NAV] Crossing Diamond")
             st = NAV_DOT_LINE
             nav_state.write(st)
 
         elif st == NAV_DOT_LINE:
-            segment_start = s_hat
-            st = NAV_FORK2
-            nav_state.write(st)
+            straight_flag.write(1)
+            target_distance.write(0.15)
+            state.write(7)
+            if motion_done.read() == 1:
+                st = NAV_FORK2
+                nav_state.write(st)
 
         elif st == NAV_FORK2:
-            if s_hat > BRIDGE_ENTRY_S - 0.2:
-                st = NAV_TOP_CURVE
-                nav_state.write(NAV_TOP_CURVE)
+            fork_detected.write(1)
+            st = NAV_TOP_CURVE
+            nav_state.write(st)
 
-            if (s_hat - s_start) > 0.25:
-                line_base_sp_sh(BASE_SP)
-                st = NAV_TOP_CURVE
+        elif st == NAV_TOP_CURVE: 
+            # follow line
+            st = NAV_MAZE
+            nav_state.write(st)
+        
+        elif st == NAV_MAZE:
+            straight_flag.write(1)
+            target_distance.write(0.300)
+            state.write(7)
+            if motion_done.read() == 1:
+                st = NAV_BRIDGE
+                nav_state.write(st)
+
+        elif st == NAV_BRIDGE:
+            straight_flag.write(1)
+            target_distance.write(0.625)
+            state.write(7)
+            if motion_done.read() == 1:
+                st = NAV_BRIDGE_TURN
+                nav_state.write(st)
+
+        elif st == NAV_BRIDGE_TURN:
+            turn_flag.write(1)
+            target_turn.write(90)
+            state.write(7)
+            if motion_done.read() == 1:
+                st = NAV_BRIDGE_EXIT
                 nav_state.write(st)
         
-        elif st == NAV_TEST_STRAIGHT:
-            target_dist = 0.5
-            speed = 20
-            if 'ts_init' not in globals():
-                ts_init = True
-                straight_s0 = s_hat
+        elif st == NAV_BRIDGE_EXIT:
+            straight_flag.write(1)
+            target_distance.write(0.100)
+            state.write(7)
+            if motion_done.read() == 1:
+                st = NAV_WALL
+                nav_state.write(st)
 
-            spL.write(speed)
-            spR.write(speed)
-            pid_mode.write(1)
-            state.write(2)
+        elif st == NAV_WALL:
+            # hit bump 
+            straight_flag.write(1)
+            target_distance.write(-0.150)
+            state.write(7)
+            if motion_done.read() == 1:
+                st = NAV_TURN
+                nav_state.write(st)
 
-            if(s_hat - straight_s0) >= target_dist:
-                spL.write(0)
-                spR.write(0)
-                pid_mode.write(1)
-                state.write(0)
-                ts_init = False
-        elif st == NAV_TEST_TURN:
-            target_angle = math.radians(90)
-            turn_rate_speed = 20
+        elif st == NAV_TURN:
+            turn_flag.write(1)
+            target_turn.write(90)
+            state.write(7)
+            if motion_done.read() == 1:
+                st = NAV_FINAL
+                nav_state.write(st)
 
-            if 'tt_init' not in globals():
-                tt_init = True 
-                psi0 = psi_hat
+        elif st == NAV_FINAL:
+            straight_flag.write(1)
+            target_distance.write(0.150)
+            state.write(7)
+            
+            if motion_done.read() == 1:
+                st = NAV_FINISH
+                nav_state.write(st)
 
-            spL.write(-turn_rate_speed)
-            spR.write(turn_rate_speed)
+            
 
-            pid_mode.write(1)
-            state.write(2)
+        elif st==NAV_FINISH:
+            go_flag.write(0)
+            state.write(0)
 
-            dpsi = wrap_pi(psi_hat - psi0)
-
-            if abs(dpsi) >= abs(target_angle):
-                spL.write(0)
-                spR.write(0)
-                pid_mode.write(1)
-                state.write(0)
-                tt_init = False
-                
 
 
 
