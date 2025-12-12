@@ -11,6 +11,8 @@ from controller_pid import PIDController, voltage_to_duty  # add this file to /f
 from LineSensor import LineSensorArray
 import sys
 from bno055 import BNO055
+from bump_sensor import BumpBoard
+
 # ------------------ CONFIG (EDIT ME) ------------------
 # PWM ~20 kHz; change Timer/Channel and pins according to wiring
 PWM_TIM_L = Timer(1, freq=20000); PWM_CH_L = 1
@@ -122,7 +124,7 @@ motion_done = task_share.Share('B', thread_protect = False, name = "motion_done"
 speed = task_share.Share('B', thread_protect = False, name = "Speed")
 
 LINE_PINS = ['PB0','PB1','PA1','PC2','PC3'] # adjust based on pins
-
+BUMP_PINS = [("LEFT",  "PA0"),("RIGHT", "PA4")] # adjust based on pins
 
 
 
@@ -321,7 +323,7 @@ def PID_task():
 
     while True:
         st  = state.read()
-        running = (st == 2 and go_flag.read()) or (st == 4) or (st == 5 )
+        running = (st == 2 and go_flag.read()) or (st == 4) or (st == 5) or (st == 7)  
         
 
         if running == 1:
@@ -884,6 +886,137 @@ def straight_turn_task():
                     
         yield 0     
 
+def bump_task():
+    """Watch the bump sensors and, on a hit, execute:
+       - Back 100 mm
+       - Turn right 90°
+       - Half-circle left with R = 112.5 mm
+       - Stop
+       All motion is based on encoder / state-estimator feedback.
+    """
+    bumps = BumpBoard(BUMP_PINS)
+
+    # Local FSM phases
+    PH_IDLE       = 0
+    PH_BACKUP     = 1
+    PH_TURN_RIGHT = 2
+    PH_ARC_LEFT   = 3
+    PH_DONE       = 4
+
+    phase = PH_IDLE
+
+    # Saved states for measurement
+    s0   = 0.0
+    psi0 = 0.0
+
+    # Geometry / targets
+    BACK_DIST = 0.10          # 100 mm in meters
+    R_ARC     = 0.1125        # 112.5 mm in meters
+    ANG_90    = math.radians(90.0)
+    ANG_180   = math.pi
+
+    # Speeds in "sp" units (same scale as line-follow)
+    BACK_SP   = 20
+    TURN_SP   = 15
+    ARC_SP_R  = 20            # right wheel speed for half-circle
+
+    while True:
+        # Always update bump sensors
+        bumps.update()
+        st = state.read()
+
+        if phase == PH_IDLE:
+            # Only react to bump when we're in line-follow mode
+            if st == 4:
+                hits = bumps.hits()
+                if hits:
+                    _print("[BUMP] Hit on: {}".format(", ".join(hits)))
+
+                    # Switch into bump maneuver mode
+                    state.write(7)
+
+                    # --- Phase 1: back up 100 mm ---
+                    s0 = float(xhat_s.read())
+
+                    spL.write(-BACK_SP)
+                    spR.write(-BACK_SP)
+
+                    phase = PH_BACKUP
+
+        elif phase == PH_BACKUP:
+            # Measure distance traveled using the observer
+            s = float(xhat_s.read())
+            ds = abs(s - s0)
+
+            if ds >= BACK_DIST - 0.005:   # small tolerance
+                # Stop, then prepare for the right-turn
+                spL.write(0)
+                spR.write(0)
+
+                # --- Phase 2: right 90° pivot ---
+                psi0 = float(xhat_psi.read())
+
+                # Right turn on the spot: left fwd, right back
+                spL.write(TURN_SP)
+                spR.write(-TURN_SP)
+
+                phase = PH_TURN_RIGHT
+
+        elif phase == PH_TURN_RIGHT:
+            psi = float(xhat_psi.read())
+            dpsi = wrap_pi(psi - psi0)
+
+            if abs(dpsi) >= ANG_90 - math.radians(3.0):
+                # Stop, then prepare for half-circle left
+                spL.write(0)
+                spR.write(0)
+
+                # --- Phase 3: half-circle left, R = 112.5 mm ---
+                psi0 = float(xhat_psi.read())
+
+                # For a differential drive, radius R for the robot center is:
+                #   R = (L/2) * (vL + vR) / (vR - vL)
+                # For a chosen R and wheelbase L, the ratio alpha = vL/vR is:
+                #   alpha = (2R/L - 1) / (2R/L + 1)
+                twoR_over_L = 2.0 * R_ARC / L
+                alpha = (twoR_over_L - 1.0) / (twoR_over_L + 1.0)
+
+                spR_val = ARC_SP_R
+                spL_val = int(spR_val * alpha)
+                if spL_val < 5:     # don't let it stall
+                    spL_val = 5
+
+                # Both wheels forward, right faster => left-turn arc
+                spL.write(spL_val)
+                spR.write(spR_val)
+
+                phase = PH_ARC_LEFT
+
+        elif phase == PH_ARC_LEFT:
+            psi = float(xhat_psi.read())
+            dpsi = wrap_pi(psi - psi0)
+
+            # Stop after ~180° of left-turn
+            if abs(dpsi) >= ANG_180 - math.radians(5.0):
+                spL.write(0)
+                spR.write(0)
+
+                # Make sure motors are really off
+                try:
+                    LEFT.set_effort(0)
+                    RIGHT.set_effort(0)
+                    time.sleep_ms(150)
+                    LEFT.disable()
+                    RIGHT.disable()
+                except Exception:
+                    pass
+
+                # Leave robot stopped in an idle state
+                state.write(0)
+                phase = PH_DONE
+
+        # After PH_DONE we just sit here; no more bump responses this run
+        yield 0
 
 
 def map_task(): # cut into segments to analyze
@@ -1045,6 +1178,8 @@ def main():
     cotask.task_list.append(cotask.Task(test_observer_task,name = "TestObserver", priority = 2, period = 50, profile = False))
     cotask.task_list.append(cotask.Task(turn_observer_task, name = "TurnObserver", priority = 2, period = 50, profile = False))
     cotask.task_list.append(cotask.Task(straight_turn_task, name = "straight_turn", priority = 2, period= 50, profile = False))
+    cotask.task_list.append(cotask.Task(bump_task, name="bump", priority=3, period=10, profile=False))
+
     #_print("READY: g <duty%> <ms>  |  v <spL_cps> <spR_cps> <ms>  |  cfg kp ki kd alpha ipd ff  |  vbat <V>")
  
     while True:
