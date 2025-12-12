@@ -179,7 +179,7 @@ stateDiagram-v2
     S3 --> S2: motion_done\n(state = 4)
 
     S2 --> S0: nav_finish\n(go_flag = 0,\nstate = 0)
-
+```
 
 Map navigation FSM
 
@@ -217,7 +217,7 @@ stateDiagram-v2
     S10 --> S11: back off wall
     S11 --> S12: turn done
     S12 --> S13: final distance
-
+```
 
 
 ## Task Descriptions
