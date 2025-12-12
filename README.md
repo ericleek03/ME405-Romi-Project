@@ -158,8 +158,62 @@ To show the concurrent tasks running for the Romi project Map course a task diag
 
 ### Finite State Machine
 
-A finite state machine was constructed that corresponded to most of the tasks used 
+Global control-mode FSM
 
+stateDiagram-v2
+    direction LR
+
+    [*] --> S0
+
+    state "S0\nIDLE" as S0
+    state "S1\nLINE CAL" as S1
+    state "S2\nFOLLOW" as S2
+    state "S3\nSEGMENT\n(straight/turn)" as S3
+
+    S0 --> S1: start map\n(state = 3)
+    S1 --> S2: line_cal_done\n(state = 4)
+
+    S2 --> S3: map requests\nstraight/turn\n(state = 7)
+    S3 --> S2: motion_done\n(state = 4)
+
+    S2 --> S0: nav_finish\n(go_flag = 0,\nstate = 0)
+
+
+Map navigation FSM
+
+stateDiagram-v2
+    direction LR
+
+    [*] --> S0
+
+    state "S0\nSTART\n(line cal)" as S0
+    state "S1\nFORK 1\n(right path)" as S1
+    state "S2\nDIAMOND" as S2
+    state "S3\nDOT LINE\n(straight)" as S3
+    state "S4\nFORK 2\n(right path)" as S4
+    state "S5\nTOP CURVE\n(follow)" as S5
+    state "S6\nMAZE ENTRY\n(straight)" as S6
+    state "S7\nBRIDGE\n(straight)" as S7
+    state "S8\nBRIDGE TURN\n(90°)" as S8
+    state "S9\nBRIDGE EXIT\n(straight)" as S9
+    state "S10\nWALL\n(approach\n+ back off)" as S10
+    state "S11\nFINAL TURN\n(90°)" as S11
+    state "S12\nFINISH DRIVE\n(straight)" as S12
+    state "S13\nFINISH\n(stop)" as S13
+
+    S0  --> S1: after line cal
+    S1  --> S2: pass fork 1
+    S2  --> S3: reach dot line
+    S3  --> S4: segment done
+    S4  --> S5: pass fork 2
+    S5  --> S6: enter maze
+    S6  --> S7: reach bridge
+    S7  --> S8: segment done
+    S8  --> S9: turn done
+    S9  --> S10: off bridge
+    S10 --> S11: back off wall
+    S11 --> S12: turn done
+    S12 --> S13: final distance
 
 
 
