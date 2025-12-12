@@ -59,6 +59,7 @@ Physically, all sensor boards are mounted to give the robot a clear view of the 
 | 2 | Bumm Sensors | 
 | 1 | IMU Sensor | 
 | 1 | Bluetooth Module | 
+|---| ---------------- |
 
 **Critical Parameters**
 | Parameter | Value |
@@ -72,6 +73,7 @@ Physically, all sensor boards are mounted to give the robot a clear view of the 
 | Motor Torque (Stall)	| 177 N*mm @ 4.5V <br/> 283 N*mm @ 7.2V | 
 | Motor Speed (No-Load)	| 150 RPM @ 4.5V <br/> 240 RPM @ 7.2V |
 | Max Speed (Translational) |	550 mm/s @ 4.5V <br/> 880 mm/s @ 7.2V |
+| ------------------------- | ------------------------------------- |
 
 **Romi Dynamics**
 The equations below show the state equations of the Romi
