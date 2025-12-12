@@ -37,7 +37,7 @@ A terminal emulator such as **PuTTY** was used to interact with the robot. Use t
 
 ### Course Layout
 
-The course shown below is the track the Romi was required to navigate. Black dots represent checkpoints. Red cups placed inside dotted circles incur a time penalty if displaced.
+The course shown below is the track the Romi was required to navigate. Black dots represent checkpoints. Red cups placed inside dotted circles incur a time penalty if displaced. Each major checkpoint and feature on the map is associated with a specific state in the map navigation finite state machine.
 
 ![Map Course](media/Game_Track-1.png)
 
@@ -59,7 +59,7 @@ The system is built around the **Nucleo L476RG**, which interfaces with:
 - Bump switches
 - Bluetooth module
 
-Sensors are mounted to maximize visibility of the track and obstacles, with short wiring runs for reliability and ease of servicing.
+Sensors are mounted to maximize visibility of the track and obstacles, with short wiring runs for reliability and ease of servicing. Motor power is provided through DRV8838 motor drivers controlled by PWM outputs from the Nucleo, and the Bluetooth module is reserved for runtime monitoring and future user-interface extensions.
 
 ---
 
@@ -99,6 +99,9 @@ Sensors are mounted to maximize visibility of the track and obstacles, with shor
 | No-Load Speed | 150 RPM @ 4.5 V / 240 RPM @ 7.2 V |
 | Max Speed | 550 mm/s @ 4.5 V / 880 mm/s @ 7.2 V |
 
+These parameters were taken from the Romi and motor datasheets and are used directly in the kinematic model, encoder conversion factors, and velocity controller tuning.
+
+
 ---
 
 ## System Architecture
@@ -113,7 +116,7 @@ The Romi runs multiple cooperative tasks using `cotask.py` and `task_share.py`. 
 - State estimation
 - Map navigation
 
-Each task runs as a generator function with a defined priority and execution period.
+Each task runs as a generator function with a defined priority and execution period.Time-critical tasks such as encoder updates and PID control are given higher priority, while high-level navigation and map logic run at lower priority but still at a fixed and predictable rate.
 
 ---
 
@@ -141,8 +144,12 @@ This workflow ensures repeatability across runs and after hardware changes.
 
 ![Task Diagram](media/Task_Diagram.png)
 
+This diagram summarizes how sensing, control, and navigation tasks interact and share information at runtime.
+
 ---
 ### Finite State Machine
+
+The robot behavior is organized by two cooperating finite state machines: a global control-mode FSM that selects the active behavior (idle, line follow, or straight/turn segment) and a map navigation FSM that steps through the checkpoints of the course.
 
 **Global control-mode FSM**
 
@@ -212,17 +219,19 @@ A sample line-following run is shown in the video below:
 
 [Line Following Demonstration](https://github.com/user-attachments/assets/12b63d06-b12a-43de-abc6-85b22fbb766f)
 
+The robot tracks the tape smoothly through the circle, maintains a roughly constant speed, and corrects small disturbances without leaving the line.
+
 ---
 
 ## Full Course Run
 
-A typical run consists of booting the system, performing sensor calibration, and entering map-navigation mode. The robot then autonomously completes the course and stops at the finish point. Telemetry data can be streamed over serial for debugging and performance analysis.
+A typical run consists of booting the system, performing sensor calibration, and entering map-navigation mode. The robot then autonomously completes the course and stops at the finish point. Telemetry data can be streamed over serial for debugging and performance analysis. On a successful attempt the full sequence of line-following, straight segments, bridge crossing, and wall interaction is completed in a single continuous motion without manual intervention.
 
 ---
 
 ## Troubleshooting
 
-Early issues included line-following overshoot and distance errors during state-estimation segments. These were resolved through PID tuning and overshoot correction factors.
+Early issues included line-following overshoot and distance errors during state-estimation segments. These were resolved through PID tuning and overshoot correction factors. Additional problems such as intermittent IMU readings and noisy encoder counts were addressed by improving wiring, adding timeout checks, and verifying that each driver task yielded correctly.
 
 ---
 
