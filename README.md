@@ -150,7 +150,7 @@ With the sensors validated, we tune the wheel-velocity PID controllers and obser
 ### Task Diagram 
 
 To show the concurrent tasks running for the Romi project Map course a task diagram was created. 
-
+![Task Diagram](media/Task_Diagram.png)
 
 
 
