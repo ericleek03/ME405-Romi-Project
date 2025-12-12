@@ -1,0 +1,4 @@
+theme: null
+markdown: GFM
+kramdown:
+  input: GFM
