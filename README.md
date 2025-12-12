@@ -160,6 +160,8 @@ To show the concurrent tasks running for the Romi project Map course a task diag
 
 Global control-mode FSM
 
+
+```mermaid
 stateDiagram-v2
     direction LR
 
@@ -181,6 +183,7 @@ stateDiagram-v2
 
 Map navigation FSM
 
+```mermaid
 stateDiagram-v2
     direction LR
 
