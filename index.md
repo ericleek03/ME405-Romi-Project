@@ -4,16 +4,16 @@ title: ME405 Romi Project
 ---
 
 ## Table of Contents
+* TOC
 {:toc}
 
 ---
-
 
 # ME405 Romi Project
 
 ## Overview
 
-This repository contains the software and documentation for a MicroPython Romi robot designed for autonomous navigation using cooperative multitasking, motor control, and onboard sensors. The robot was built using a Nucleo L476RG microcontroller. The line sensor and bump sensors were purchased through Pololu.
+This repository contains the software and documentation for a MicaroPython Romi robot designed for autonomous navigation using cooperative multitasking, motor control, and onboard sensors. The robot was built using a Nucleo L476RG microcontroller. The line sensor and bump sensors were purchased through Pololu.
 
 The project was completed collaboratively by **Eric Lee, Roman Ruettimann, and Jonathan Enrique Corvera**, with all members contributing equally to both hardware and software development.
 
@@ -23,8 +23,8 @@ The project was completed collaboratively by **Eric Lee, Roman Ruettimann, and J
 
 The primary goal of this project was to design a Romi robot capable of reliably completing a multi-checkpoint course using only onboard sensing and state estimation. The robot must:
 
-- Follow taped lines
-- Navigate sections without lines
+- Follow the black lines
+- Navigate sections without lines with state estimation
 - Detect and react to physical obstacles
 - Operate fully autonomously
 
