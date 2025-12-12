@@ -8,6 +8,12 @@ This repository contains the software and documentation for a MicroPython Romi r
 
  _The collaborators on this project are **Eric Lee, Roman Ruettimann, and Jonathan Enrique Corvera.** All three students each contributed to the software and hardware of the code equally._ 
 
+**Project Goals & Features**
+
+Our primary goal for this project was to build a Romi robot that can reliably complete a multi-checkpoint course using only onboard sensing and state estimation. The robot must follow lines, handle map segments without lines, and interact with physical obstacles while remaining fully autonomous. Along the way we focused on clean task structure, repeatable calibration routines, and tools that make debugging on the bench as easy as tuning on the course.
+
+A key feature of our design is that everything runs on a cooperative multitasking framework. Each subsystem (line following, state estimation, bump sensing, mapping, and velocity control) is implemented as its own task with clearly defined shared variables. This keeps the code modular so that components like the observer or PID tuning can be improved without rewriting the rest of the project.
+
 
 ## Installation Instructions
 All the python files included in the compile file is used to run the Romi system. The files in the compile folder should be imported directly into the Romi with a usb cord. The **main.py** is the central code. This code is reponsible for holding all the tasks and shared variables. The other files are classes and objects used to make the code function. To run the code, a terminal emulator, PuTTY,  was used to run commands and the code. Find the communication port number on your computer and select a baudrate of 115200 to open a PuTTY terminal. 
@@ -26,6 +32,11 @@ The image shown below is the course the Romi was tasked to navigate through. To 
 The robot used in this project is shown below. This robot consists of a chassis with multiple holes to attach many components.  
 ![IMG_6576](https://github.com/user-attachments/assets/ed25e055-c15b-46d2-824f-2e3d41bdcd17)
 
+**Hardware Architecture Summary**
+
+The hardware is organized around the Nucleo L476RG as the main controller, with separate boards for line sensing, inertial measurement, Bluetooth, and bump detection. The Romi chassis provides integrated motors and encoders, which connect directly to our custom Motor and Encoder driver classes. Power is supplied from an onboard battery pack sized to support continuous driving, sensing, and wireless communication for a full run of the course.
+
+Physically, all sensor boards are mounted to give the robot a clear view of the track and obstacles. The 5-channel IR line sensor sits at the front of the chassis, the BNO055 IMU is mounted rigidly above the wheelbase, and the bump switches are placed at the leading edge to detect contact with cups and walls. This layout keeps wiring short and makes the robot easy to service between runs.
 
 **Component List**
 | Quantity | Component |
@@ -124,6 +135,18 @@ The Romi runs several tasks running using cotask.py to perform line following, s
 
 Shared variables were created by using task_share.py to allow for communication through tasks without blocking. Each task is set up as a generator function with each generator having a corresponding priority and run speed based on the importance of the task. This is shown at the bottom the very bottom of the main.py file. 
 
+## Software Architecture Summary
+
+On the software side, the project is structured as a set of cooperative tasks built on cotask.py and task_share.py. Low-level tasks handle encoders, IMU updates, and PID velocity control, while higher-level tasks handle line following, state estimation, and navigation logic for the map. Each task exchanges data only through well-defined shares, which keeps timing predictable and avoids blocking calls between modules.
+
+The observer task uses a reduced-order Romi model to estimate forward distance, heading, and wheel speeds from encoder and IMU measurements. These estimated states are then consumed by the navigation and straight-line turning tasks to achieve target distances and angles without relying on external reference points. This model-based approach makes the robot much more repeatable when running on different floor surfaces or battery voltages.
+
+## Calibration & Tuning Workflow
+
+Before running the full course, we perform a short calibration and tuning workflow. The line sensor is calibrated first on both the white background and black tape to establish the correct brightness range for each channel. Then we verify the encoder readings and IMU output to ensure that the heading and yaw rate are stable and consistent with small test motions.
+
+With the sensors validated, we tune the wheel-velocity PID controllers and observer gains using short straight-line and turning tests. These tests confirm that a commanded distance or angle results in the expected physical motion, and any residual errors are corrected with small overshoot compensations. This repeatable process allows us to quickly recover from hardware changes or recalibrate after the robot has been transported.
+
 ### Task Diagram 
 
 To show the concurrent tasks running for the Romi project Map course a task diagram was created. 
@@ -191,7 +214,11 @@ Line Sensor Following. The video below shows the Romi following a path
 
 https://github.com/user-attachments/assets/12b63d06-b12a-43de-abc6-85b22fbb766f
 
+## Running a Full Course Attempt
 
+A typical run begins by powering on the Romi, opening a serial terminal (e.g. PuTTY at 115200 baud), and rebooting the board with Ctrl+D. Once the system boots, the line sensor calibration sequence is performed and the state machine is placed into map-navigation mode. From there the robot autonomously follows the track, switches between line following and state estimation segments, and reacts to obstacles using the bump sensors.
+
+During the run, telemetry such as encoder velocities, estimated distance, and heading can be streamed over the serial interface for logging and analysis. This data is invaluable for diagnosing misalignment, retuning a controller, or verifying that each checkpoint is reached in the correct order. At the end of the course, the robot stops automatically, and the logged data can be used to compare multiple runs or document performance improvements.
 
 ## Troubleshooting and calculations
 Main issues related to line following of the robot. At the beginning the line sensor would not follow the line accurately, usually overshooting or lacking the response time to quickly adjust back to the line.
