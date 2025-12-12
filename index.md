@@ -3,7 +3,13 @@ layout: default
 title: ME405 Romi Project
 ---
 
-{# ME405 Romi Project
+## Table of Contents
+{:toc}
+
+---
+
+
+# ME405 Romi Project
 
 ## Overview
 
@@ -171,4 +177,4 @@ Early issues included line-following overshoot and distance errors during state-
 ## Takeaways
 
 This project emphasized the importance of task-based software structure, careful calibration, and systematic debugging. Cooperative multitasking proved to be an effective approach for managing complex autonomous behavior on a resource-constrained embedded platform.
-}
+
