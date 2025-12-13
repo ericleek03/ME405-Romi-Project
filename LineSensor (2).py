@@ -4,15 +4,17 @@ import utime, json
 
 class LineSensorChannel:
     """One reflective sensor channel with simple oversampling and filtering."""
+
     def __init__(self, pin_name, name=None, oversample=8):
+        # Set up ADC on the given pin
         self.pin        = Pin(pin_name)
         self.adc        = ADC(self.pin)
         self.name       = name or pin_name
         self.oversample = int(oversample)
 
         # Calibration range (raw ADC)
-        self.min_val = 4095
-        self.max_val = 0
+        self.min_val = 4095        # "white" level (background)
+        self.max_val = 0           # "black" level (line)
 
         # Low-pass filtered normalized value
         self._filt      = 0.0
@@ -21,6 +23,7 @@ class LineSensorChannel:
     def read_raw(self):
         """Return oversampled raw ADC value (0–4095)."""
         total = 0
+        # Average multiple readings to reduce noise
         for _ in range(self.oversample):
             total += self.adc.read()
         return total // self.oversample
@@ -33,22 +36,28 @@ class LineSensorChannel:
         """
         raw = self.read_raw()
 
+        # Use min/max in correct order (handles swapped cases)
         lo = min(self.min_val, self.max_val)
         hi = max(self.min_val, self.max_val)
         if hi <= lo:
+            # Fallback if not calibrated
             lo, hi = 0, 4095
 
+        # Clamp reading into calibration range
         if raw < lo:
             raw = lo
         if raw > hi:
             raw = hi
 
+        # Normalize into [0, 1]
         norm = (raw - lo) / float(hi - lo)
 
+        # First sample initializes filter
         if not self._filt_init:
             self._filt = norm
             self._filt_init = True
         else:
+            # Simple low-pass IIR filter
             self._filt = (1.0 - alpha) * self._filt + alpha * norm
 
         return self._filt
@@ -65,7 +74,9 @@ class LineSensorArray:
         - read_all_norm()  -> list of brightness values in [0,1]
         - get_centroid()   -> error in [-1,1] (0 on center), or None if no line
     """
+
     def __init__(self, pins, oversample=8, filt_alpha=0.3, cal_path="line_cal.json"):
+        # Build channels (reversed so S0 is left-most in course)
         self.channels = [
             LineSensorChannel(pin_name, name="S{}".format(i), oversample=oversample)
             for i, pin_name in enumerate(reversed(pins))
@@ -74,19 +85,21 @@ class LineSensorArray:
         self.cal_path   = cal_path
         self.calibrated = False
 
-        # Filtered centroid
+        # Filtered centroid value
         self._centroid_f    = 0.0
         self._centroid_init = False
 
-        # Try to load any existing calibration
+        # Try loading existing calibration (non-fatal if missing)
         self.load_calibration(self.cal_path)
 
     # ---------- Internal helpers ----------
 
     def _read_all_raw(self):
+        """Return one raw reading per channel."""
         return [ch.read_raw() for ch in self.channels]
 
     def _avg_samples(self, nsamples=32, delay_ms=5):
+        """Average multiple readings per channel for calibration."""
         n = len(self.channels)
         acc = [0] * n
         for _ in range(nsamples):
@@ -152,36 +165,38 @@ class LineSensorArray:
     def get_centroid(self):
         """Return filtered centroid error in [-1,1], or None if no line.
 
-        We convert brightness -> 'line strength' by (1 - norm) so that a darker
-        line on lighter floor gives larger weights.
+        Uses brightness values directly; can be flipped to 'line strength'
+        by using (1 - v) if needed.
         """
         norms = self.read_all_norm()
-        # Convert brightness to line strength (dark line => high strength)
-        #vals = [1.0 - v for v in norms]
-        
+
+        # If using dark line, convert to "strength" here
+        # vals = [1.0 - v for v in norms]
         vals = norms
+
         total = sum(vals)
         if total < 0.05:
             # No line detected
             return None
 
         n = len(vals)
-        # Positions: symmetric about 0, e.g. for 5 sensors -> [-2,-1,0,1,2]
+        # Sensor positions: symmetric around 0, e.g. 5 -> [-2, -1, 0, 1, 2]
         mid = (n - 1) / 2.0
         positions = [i - mid for i in range(n)]
+
+        # Weighted average position
         num = 0.0
         for p, v in zip(positions, vals):
             num += p * v
-        c_raw = num / total  # in roughly [-mid, mid]
-        c = c_raw / mid
-        # Normalize to [-1,1]
-        
-        # Low-pass filter centroid to knock down jitter
+        c_raw = num / total      # in [-mid, mid]
+        c = c_raw / mid          # normalize to [-1, 1]
+
+        # Low-pass filter centroid to reduce jitter
         if not self._centroid_init:
             self._centroid_f = c
             self._centroid_init = True
         else:
             alpha = 0.4
-            self._centroid_f = (1-alpha)* self._centroid_f + alpha*c
+            self._centroid_f = (1 - alpha) * self._centroid_f + alpha * c
 
         return self._centroid_f
