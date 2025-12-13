@@ -1,29 +1,36 @@
-from pyb import Pin,Timer
+from pyb import Pin, Timer
+
 
 class Motor:
-    '''A motor driver interface encapsulated in a Python class. Works with
-       motor drivers using separate PWM and direction inputs such as the DRV8838
-       drivers present on the Romi chassis from Pololu.'''
-    
-    def __init__(self, PWM_Pin: Pin, DIR_Pin: Pin, nSLP_Pin: Pin, tim:Timer, chan:int): # setup given appropriate parameters like pins and timers
-        
+    """Simple DRV8838-style motor driver with PWM + direction."""
+
+    def __init__(self, PWM_Pin: Pin, DIR_Pin: Pin, nSLP_Pin: Pin,
+                 tim: Timer, chan: int):
+        """Configure PWM channel, direction pin, and sleep pin."""
+        # nSLEEP pin: high = enabled, low = sleep
         self.nSLP_pin = Pin(nSLP_Pin, mode=Pin.OUT_PP)
-        self.DIR_pin = Pin(DIR_Pin, mode = Pin.OUT_PP)
-        self.PWM_chan = tim.channel(chan, pin=PWM_Pin, mode=Timer.PWM,pulse_width_percent = 0)
-       
-    def set_effort(self, effort):    # sets signed positive or negative effort valus between -100 and 100 
-       if (effort >0):
-           self.DIR_pin.low()
-           self.PWM_chan.pulse_width_percent(effort)
-       else:
-           self.DIR_pin.high()
-           self.PWM_chan.pulse_width_percent(-effort)
-    def enable(self): # put motor into coast mode
+        # Direction pin: high/low selects direction
+        self.DIR_pin = Pin(DIR_Pin, mode=Pin.OUT_PP)
+        # PWM channel with initial 0% duty
+        self.PWM_chan = tim.channel(
+            chan, pin=PWM_Pin, mode=Timer.PWM, pulse_width_percent=0
+        )
+
+    def set_effort(self, effort):
+        """Set signed effort in range [-100, 100] as PWM duty."""
+        # Positive effort: one direction
+        if effort > 0:
+            self.DIR_pin.low()
+            self.PWM_chan.pulse_width_percent(effort)
+        # Negative effort: opposite direction
+        else:
+            self.DIR_pin.high()
+            self.PWM_chan.pulse_width_percent(-effort)
+
+    def enable(self):
+        """Wake the motor driver (allow PWM to move motor)."""
         self.nSLP_pin.high()
-        
-            
-    def disable(self): # effort is 0 
+
+    def disable(self):
+        """Put motor driver into sleep / coast (no effort)."""
         self.nSLP_pin.low()
-
-
-
