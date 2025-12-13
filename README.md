@@ -244,7 +244,14 @@ The robot tracks the tape smoothly through the circle, maintains a roughly const
 
 A typical run consists of booting the system, performing sensor calibration, and entering map-navigation mode. The robot then autonomously completes the course and stops at the finish point. Telemetry data can be streamed over serial for debugging and performance analysis. On a successful attempt the full sequence of line-following, straight segments, bridge crossing, and wall interaction is completed in a single continuous motion without manual intervention.
 
+https://github.com/user-attachments/assets/f25d72fd-39da-4e60-a928-c1a5462a1fb5
+
 ---
+
+
+
+
+
 
 ## Troubleshooting
 
